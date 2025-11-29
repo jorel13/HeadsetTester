@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Headset Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 40px; }
+    button { margin: 10px; padding: 10px 20px; font-size: 16px; }
+    #meter { width: 300px; height: 20px; background: #ddd; margin: 20px auto; position: relative; }
+    #level { height: 100%; background: #4caf50; width: 0%; }
+    input[type=range] { width: 300px; }
+  </style>
+</head>
+<body>
+  <h1>🎧 Headset Test Page</h1>
+
+  <h2>Audio Output Test</h2>
+  <button onclick="playTestSound()">Play Test Sound</button>
+  <button onclick="stopTestSound()">Stop Test Sound</button><br>
+  <label>Playback Volume: 
+    <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.5" oninput="setVolume(this.value)">
+  </label>
+  <p id="volumeDisplay">Volume: 50%</p>
+
+  <h2>Microphone Test</h2>
+  <button id="recordBtn" onclick="toggleRecording()">Start Recording</button>
+  <button id="playBtn" onclick="togglePlayback()">Play Recording</button>
+
+  <div id="meter"><div id="level"></div></div>
+  <p id="status">Mic level: 0%</p>
+
+  <script>
+    let audioContext, analyser, dataArray, mediaRecorder, recordedChunks = [];
+    let micStream;
+    let testAudio = null;
+    let isRecording = false;
+    let isPlaying = false;
+    let playbackAudio = null;
+
+    // Initialize mic meter on page load
+    window.onload = async function() {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(micStream);
+      analyser = audioContext.createAnalyser();
+      source.connect(analyser);
+      dataArray = new Uint8Array(analyser.frequencyBinCount);
+      updateMeter();
+    };
+
+    // Test sound controls
+    function playTestSound() {
+      if (!testAudio) {
+        testAudio = new Audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3");
+        testAudio.loop = true;
+        testAudio.volume = document.getElementById("volumeSlider").value; // default 50%
+      }
+      testAudio.play();
+    }
+
+    function stopTestSound() {
+      if (testAudio) {
+        testAudio.pause();
+        testAudio.currentTime = 0;
+      }
+    }
+
+    function setVolume(value) {
+      if (testAudio) testAudio.volume = value;
+      document.getElementById("volumeDisplay").innerText = "Volume: " + Math.round(value * 100) + "%";
+    }
+
+    // Recording toggle
+    function toggleRecording() {
+      if (!isRecording) {
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(micStream);
+        mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
+        mediaRecorder.start();
+        isRecording = true;
+        document.getElementById("recordBtn").innerText = "Stop Recording";
+        document.getElementById("status").innerText = "Recording...";
+      } else {
+        mediaRecorder.stop();
+        isRecording = false;
+        document.getElementById("recordBtn").innerText = "Start Recording";
+        document.getElementById("status").innerText = "Recording stopped.";
+      }
+    }
+
+    // Playback toggle
+    function togglePlayback() {
+      if (!isPlaying) {
+        if (recordedChunks.length > 0) {
+          const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+          const audioURL = URL.createObjectURL(blob);
+          playbackAudio = new Audio(audioURL);
+          playbackAudio.volume = document.getElementById("volumeSlider").value;
+          playbackAudio.play();
+          isPlaying = true;
+          document.getElementById("playBtn").innerText = "Stop Playback";
+          playbackAudio.onended = () => {
+            isPlaying = false;
+            document.getElementById("playBtn").innerText = "Play Recording";
+          };
+        }
+      } else {
+        if (playbackAudio) {
+          playbackAudio.pause();
+          playbackAudio.currentTime = 0;
+        }
+        isPlaying = false;
+        document.getElementById("playBtn").innerText = "Play Recording";
+      }
+    }
+
+    // Mic meter update loop
+    function updateMeter() {
+      requestAnimationFrame(updateMeter);
+      if (analyser) {
+        analyser.getByteFrequencyData(dataArray);
+        let level = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        let percent = Math.min(100, (level / 256) * 100);
+        document.getElementById("level").style.width = percent + "%";
+        document.getElementById("status").innerText = (isRecording ? "Recording... " : "Mic level: ") + percent.toFixed(0) + "%";
+      }
+    }
+  </script>
+</body>
+</html>
